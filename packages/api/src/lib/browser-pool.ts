@@ -6,8 +6,19 @@ import type { Page } from "patchright-core";
 import { env } from "../env.js";
 
 const SLOT_KEY = "getbestride:browser:slot";
+/**
+ * Ledger of Solari sessions this process launched and has not yet released.
+ * A hash (sessionId -> "launchedAt:attempts") rather than a set, so the reaper
+ * can ignore young sessions and bound its retries. Redis outlives the process,
+ * which is the whole point: a crash leaves the record, not a ghost.
+ */
+const LAUNCHED_KEY = "getbestride:browser:launched";
 const SLOT_TTL_SECONDS = 120;
 const HEARTBEAT_INTERVAL_MS = 30000;
+const SWEEP_INTERVAL_MS = 60000;
+/** Teardown finishes ~20s after the slot dies; younger sessions are in flight. */
+const SWEEP_MIN_AGE_MS = 180000;
+const SWEEP_MAX_ATTEMPTS = 3;
 
 const ACQUIRE_LUA = `
 local raw = redis.call('GET', KEYS[1])
@@ -107,60 +118,178 @@ const READY_POLL_INTERVAL_MS = 400;
 const READY_POLL_ATTEMPTS = 60;
 
 /**
- * Upper bound for closing the browser and releasing the session.
+ * Upper bound for the CDP close of a remote browser.
  *
- * Teardown runs detached from the response (see below), so this only decides
- * how long a stuck close is given before it is logged and abandoned. The
- * session auto-releases server-side anyway.
+ * `BrowserSession.close()` issues the Solari DELETE only *after* that CDP call
+ * resolves, so a hung close strands the session: Solari keeps it Running, the
+ * pool slot stays held, and our Redis refcount is already gone. The budget
+ * turns a hang into a fallthrough to an explicit release below.
  */
-const TEARDOWN_TIMEOUT_MS = 15000;
+const CLOSE_BUDGET_MS = 5000;
+
+/** Upper bound for the DELETE that actually ends the session. */
+const RELEASE_BUDGET_MS = 15000;
+
+function withBudget<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // An abandoned loser must not surface later as an unhandled rejection.
+  promise.catch(() => {});
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`exceeded ${ms}ms`)), ms);
+    }),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+async function trackLaunched(sessionId: string): Promise<void> {
+  await redis
+    .hset(LAUNCHED_KEY, { [sessionId]: `${Date.now()}:0` })
+    .catch(() => {});
+}
+
+async function forgetLaunched(sessionId: string): Promise<void> {
+  await redis.hdel(LAUNCHED_KEY, sessionId).catch(() => {});
+}
+
+let reaperStarted = false;
+let sweeping = false;
+
+/**
+ * Collect sessions whose release never landed — process crash, slot TTL expiry
+ * while a scrape was in flight, or a release that kept failing. Anything in the
+ * ledger that is neither the live slot's session nor younger than the teardown
+ * window is a stranded browser still billing for its pool slot.
+ */
+function startReaper(): void {
+  if (reaperStarted) return;
+  reaperStarted = true;
+  runSweep();
+  const timer = setInterval(runSweep, SWEEP_INTERVAL_MS);
+  timer.unref?.();
+}
+
+const runSweep = (): void => {
+  void sweepStranded().catch((cause) => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    console.error(`[browser-pool] reaper sweep failed: ${message}`);
+  });
+};
+
+async function sweepStranded(): Promise<void> {
+  if (sweeping) return;
+  sweeping = true;
+  try {
+    const launched = await redis
+      .hgetall<Record<string, string>>(LAUNCHED_KEY)
+      .catch(() => null);
+    if (!launched || Object.keys(launched).length === 0) return;
+
+    const slot = await redis
+      .get<{ state?: string; sessionId?: string }>(SLOT_KEY)
+      .catch(() => null);
+    if (slot?.state === "starting") return; // a launch is in flight
+
+    const sweeper = new Solari({
+      apiKey: env.SOLARI_API_KEY,
+      baseUrl: "https://api.getsolari.com",
+    });
+    try {
+      for (const [sessionId, raw] of Object.entries(launched)) {
+        if (sessionId === slot?.sessionId) continue; // still the shared browser
+
+        const [launchedAtRaw, attemptsRaw] = String(raw).split(":");
+        const launchedAt = Number(launchedAtRaw);
+        const attempts = Number(attemptsRaw ?? 0);
+        const age = Date.now() - launchedAt;
+        if (Number.isFinite(age) && age >= 0 && age < SWEEP_MIN_AGE_MS) {
+          continue; // teardown may still be mid-flight
+        }
+
+        try {
+          await withBudget(
+            sweeper.sessions.releaseAndWait(sessionId),
+            RELEASE_BUDGET_MS,
+          );
+          await forgetLaunched(sessionId);
+        } catch (cause) {
+          const message =
+            cause instanceof Error ? cause.message : String(cause);
+          if (attempts + 1 >= SWEEP_MAX_ATTEMPTS) {
+            await forgetLaunched(sessionId);
+            console.error(
+              `[browser-pool] gave up releasing stranded session ${sessionId.slice(0, 8)}… ` +
+                `after ${SWEEP_MAX_ATTEMPTS} attempts: ${message}`,
+            );
+          } else {
+            await redis
+              .hset(LAUNCHED_KEY, {
+                [sessionId]: `${launchedAt || Date.now()}:${attempts + 1}`,
+              })
+              .catch(() => {});
+            console.error(
+              `[browser-pool] reaper could not release ${sessionId.slice(0, 8)}… ` +
+                `(attempt ${attempts + 1}/${SWEEP_MAX_ATTEMPTS}): ${message}`,
+            );
+          }
+        }
+      }
+    } finally {
+      await sweeper.close().catch(() => {});
+    }
+  } finally {
+    sweeping = false;
+  }
+}
 
 async function teardown(
   solari: Solari,
   browser: BrowserSession | undefined,
   sessionId: string,
 ): Promise<void> {
-  let stage = browser ? "close browser" : "close solari client";
-  const work = (async () => {
-    if (browser) {
-      await browser.close().catch(() => {});
-      stage = "release session";
-      await solari.sessions.releaseAndWait(sessionId).catch(() => {});
-    }
-    stage = "close solari client";
+  if (!browser) {
+    // Shared browser stays up for the other in-flight requests; only the
+    // per-request client goes away.
     await solari.close().catch(() => {});
-  })();
+    return;
+  }
 
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stage = "close browser";
   try {
-    await Promise.race([
-      work,
-      new Promise<never>(
-        (_, reject) =>
-          (timer = setTimeout(
-            () =>
-              reject(
-                new Error(`teardown timed out after ${TEARDOWN_TIMEOUT_MS}ms`),
-              ),
-            TEARDOWN_TIMEOUT_MS,
-          )),
-      ),
-    ]);
-  } catch {
-    // Expected occasionally: the session reaps server-side, so this is only
-    // telling us where close got stuck, not a lost browser.
+    let closed = false;
+    await withBudget(browser.close(), CLOSE_BUDGET_MS).then(
+      () => {
+        closed = true;
+      },
+      () => {
+        // Hung or rejected — fall through to an explicit release.
+      },
+    );
+    if (!closed) {
+      stage = "release session";
+      await withBudget(
+        solari.sessions.releaseAndWait(sessionId),
+        RELEASE_BUDGET_MS,
+      );
+    }
+    await forgetLaunched(sessionId);
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
     console.error(
-      `[browser-pool] teardown stuck at "${stage}" after ${TEARDOWN_TIMEOUT_MS}ms ` +
-        `(session ${sessionId.slice(0, 8)}…; auto-releases server-side)`,
+      `[browser-pool] teardown failed at "${stage}": ${message} ` +
+        `(session ${sessionId.slice(0, 8)}…; pool slot still held, reaper retries)`,
     );
   } finally {
-    if (timer) clearTimeout(timer);
+    await solari.close().catch(() => {});
   }
 }
 
 export async function withSharedBrowser<T>(
   fn: (page: Page) => Promise<T>,
 ): Promise<T> {
+  startReaper();
   const solari = new Solari({
     apiKey: env.SOLARI_API_KEY,
     baseUrl: "https://api.getsolari.com",
@@ -182,10 +311,12 @@ export async function withSharedBrowser<T>(
         profileId: env.SOLARI_PROFILE_ID,
         proxy: { country: "in" },
       });
+      await trackLaunched(launched.id);
 
       const published = await markReady(token, launched.id);
       if (!published) {
         await launched.close().catch(() => {});
+        await forgetLaunched(launched.id);
         throw new Error(
           "Shared browser slot was lost while starting the browser",
         );
@@ -203,7 +334,19 @@ export async function withSharedBrowser<T>(
         browser = attached;
         break;
       }
-      await release(existingSessionId);
+      // Slot says ready but this process has no handle: it died and restarted
+      // (or a peer did) while the remote session kept running. Drop the slot
+      // and detach a DELETE so the next attempt launches a clean browser;
+      // the reaper catches this if the DELETE never lands.
+      const orphan = await release(existingSessionId);
+      if (orphan === "close") {
+        void withBudget(
+          solari.sessions.releaseAndWait(existingSessionId),
+          RELEASE_BUDGET_MS,
+        )
+          .then(() => forgetLaunched(existingSessionId))
+          .catch(() => {});
+      }
       continue;
     }
 
