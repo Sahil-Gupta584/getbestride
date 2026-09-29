@@ -1,0 +1,33 @@
+zerops:
+  - setup: nodejs
+    build:
+      base: nodejs@22
+      buildCommands:
+        - npm install
+        - npm --prefix apps/backend run build
+      deployFiles:
+        - apps/backend/dist
+        - apps/backend/package.json
+        - apps/backend/node_modules
+        - node_modules
+      cache:
+        - node_modules
+    run:
+      base: nodejs@22
+      ports:
+        - port: 4000
+          httpSupport: true
+      envVariables:
+        PORT: 4000
+        # Solari drives a real browser for fare scraping, so the container needs
+        # Chromium's shared libraries. The Dockerfile installs them; this is the
+        # equivalent note for hosts that build from source rather than an image.
+        #
+        # Also required, set as secrets rather than here:
+        #   SOLARI_API_KEY, SOLARI_PROFILE_ID
+        #   UPSTASH_REDIS_REST_URL, UPSTASH_REDIS_REST_TOKEN (optional)
+      start: node apps/backend/dist/index.js
+      healthCheck:
+        httpGet:
+          port: 4000
+          path: /health

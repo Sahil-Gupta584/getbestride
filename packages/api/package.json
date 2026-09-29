@@ -1,0 +1,28 @@
+{
+  "name": "@repo/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/router/index.ts",
+  "exports": {
+    ".": "./src/router/index.ts",
+    "./router/quotes": "./src/router/quotes.ts",
+    "./router-types": "./src/router-types.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "sync:rapido": "node sync-rapido-assets.mjs"
+  },
+  "dependencies": {
+    "@orpc/server": "^1.15.1",
+    "@solarisdk/browser": "0.1.4",
+    "@upstash/redis": "^1.39.0",
+    "dotenv": "^16.0.3",
+    "patchright-core": "^1.62.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "*",
+    "typescript": "^6.0.2"
+  }
+}

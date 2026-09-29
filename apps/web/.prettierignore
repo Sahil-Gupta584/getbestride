@@ -1,0 +1,6 @@
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Vendored verbatim from Rapido's published bundles. Not ours to format.
+src/lib/scraper/rapido/assets/
