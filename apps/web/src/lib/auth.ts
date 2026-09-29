@@ -11,7 +11,7 @@ import { env } from '#/env'
 const googleEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET)
 
 export const auth = betterAuth({
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: env.VITE_BETTER_AUTH_URL,
   // secret: env.BETTER_AUTH_SECRET,
   secret: env.BETTER_AUTH_SECRET || 'd3v-s3cr3t-k3y-32-byt3s-long-secret!',
   database: drizzleAdapter(db, {

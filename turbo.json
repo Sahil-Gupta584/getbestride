@@ -16,7 +16,7 @@
       ],
       "env": [
         "DATABASE_URL",
-        "BETTER_AUTH_URL",
+        "VITE_BETTER_AUTH_URL",
         "BETTER_AUTH_SECRET",
         "RESEND_API_KEY",
         "GOOGLE_CLIENT_ID",

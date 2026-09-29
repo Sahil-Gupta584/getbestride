@@ -72,6 +72,12 @@ async function runProvider(
   };
   try {
     const options = await fetch(input);
+    if (options.length === 0) {
+      console.warn(
+        `[quotes:${provider}] empty: 0 fares (request succeeded) ` +
+          `(${input.pickup.label} → ${input.drop.label})`,
+      );
+    }
     return {
       provider,
       ok: true,
@@ -82,13 +88,18 @@ async function runProvider(
       ...echo,
     };
   } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    console.error(
+      `[quotes:${provider}] failed: ${message} ` +
+        `(${input.pickup.label} → ${input.drop.label})`,
+    );
     return {
       provider,
       ok: false,
       fetchedAt,
       currency: null,
       options: [],
-      error: cause instanceof Error ? cause.message : String(cause),
+      error: message,
       ...echo,
     };
   }

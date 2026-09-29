@@ -65,8 +65,7 @@ export function toRawFare(product: UberProduct): RawFare | null {
   // A promo-covered ride reports fareAmountE5 0 with hasPromo set. The real
   // price survives in preAdjustmentValue, so prefer it — showing ₹0 for a ₹55
   // ride is accurate but reads as broken.
-  const promo =
-    fare?.hasPromo === true || product.hasPromo === true;
+  const promo = fare?.hasPromo === true || product.hasPromo === true;
   if (promo) {
     const real =
       parseDisplayPrice(fare?.preAdjustmentValue) ??
@@ -96,7 +95,10 @@ export async function getUberFareEstimates(
   return withSharedBrowser(async (page) => {
     page.setDefaultTimeout(PAGE_TIMEOUT_MS);
     page.setDefaultNavigationTimeout(PAGE_TIMEOUT_MS);
-    await page.goto(ORIGIN, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT_MS });
+    await page.goto(ORIGIN, {
+      waitUntil: "domcontentloaded",
+      timeout: PAGE_TIMEOUT_MS,
+    });
     const body = JSON.stringify({
       operationName: "Products",
       variables: {
@@ -126,12 +128,12 @@ export async function getUberFareEstimates(
       if (error.extensions?.code === "unauthorized") {
         throw new Error(
           "Uber rejected the session. The Solari profile is not logged in to " +
-          "m.uber.com, or the session expired — re-seed SOLARI_PROFILE_ID.",
+            "m.uber.com, or the session expired — re-seed SOLARI_PROFILE_ID.",
         );
       }
       throw new Error(
         `Uber GraphQL error: ${error.message}` +
-        (error.extensions?.title ? ` (${error.extensions.title})` : ""),
+          (error.extensions?.title ? ` (${error.extensions.title})` : ""),
       );
     }
     const tiers = json.data?.products?.tiers ?? [];

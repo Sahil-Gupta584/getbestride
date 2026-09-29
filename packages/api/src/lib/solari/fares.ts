@@ -79,8 +79,5 @@ export async function evaluateJson<T>(
       `${label}: expected JSON from ${request.url}, got ${result.body.slice(0, 120)}`,
     );
   }
-  console.log(
-    `[${label}] ${request.method} ${request.url} -> 200 in ${elapsed}ms`,
-  );
   return parsed;
 }

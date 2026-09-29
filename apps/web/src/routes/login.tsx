@@ -6,7 +6,8 @@ import { authClient } from '#/lib/auth-client'
 import { env } from '#/env'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
-import { RiGiftFill, RiArrowLeftLine } from 'react-icons/ri'
+import { RiArrowLeftLine } from 'react-icons/ri'
+import { Logo } from '#/components/logo'
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -110,14 +111,7 @@ function LoginPage() {
             <RiArrowLeftLine /> Back to home
           </Link>
 
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-amber-500 text-white shadow-sm">
-              <RiGiftFill className="text-lg" />
-            </span>
-            <span className="text-xl font-bold tracking-tight text-gray-900">
-              GiftForm
-            </span>
-          </div>
+          <Logo size="lg" />
 
           <Card.Title className="mt-2 text-xl font-semibold">
             Sign in to your account

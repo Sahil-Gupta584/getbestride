@@ -13,11 +13,11 @@ import {
   RiSettingsLine,
   RiUserLine,
   RiPriceTag3Line,
-  RiCarLine,
   RiMapPinLine,
 } from 'react-icons/ri'
 import { authClient } from '#/lib/auth-client'
 import { getSession } from '#/lib/session'
+import { Logo } from '#/components/logo'
 
 export const Route = createFileRoute('/_protected')({
   beforeLoad: async () => {
@@ -55,14 +55,7 @@ function ProtectedLayout() {
     <div className="flex min-h-screen flex-col bg-gray-50">
       <nav className="border-b border-gray-200 bg-white px-4 sm:px-6">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between">
-          <span className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-amber-500 text-white shadow-sm">
-              <RiCarLine className="text-base" />
-            </span>
-            <span className="text-lg font-bold tracking-tight text-gray-900">
-              GetBestRide
-            </span>
-          </span>
+          <Logo />
 
           <div className="flex items-center gap-4">
             <Dropdown>

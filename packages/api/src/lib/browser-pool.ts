@@ -76,19 +76,20 @@ async function acquire(token: string): Promise<[string, string?]> {
 }
 
 async function markReady(token: string, sessionId: string): Promise<boolean> {
-  const ok = await redis.eval(MARK_READY_LUA, [SLOT_KEY], [
-    token,
-    sessionId,
-    SLOT_TTL_SECONDS,
-  ]);
+  const ok = await redis.eval(
+    MARK_READY_LUA,
+    [SLOT_KEY],
+    [token, sessionId, SLOT_TTL_SECONDS],
+  );
   return ok === 1;
 }
 
 async function release(sessionId: string): Promise<"close" | "keep" | "gone"> {
-  const result = (await redis.eval(RELEASE_LUA, [SLOT_KEY], [
-    sessionId,
-    SLOT_TTL_SECONDS,
-  ])) as string[];
+  const result = (await redis.eval(
+    RELEASE_LUA,
+    [SLOT_KEY],
+    [sessionId, SLOT_TTL_SECONDS],
+  )) as string[];
   return (result[0] as "close" | "keep" | "gone") ?? "gone";
 }
 
@@ -119,11 +120,14 @@ async function teardown(
   browser: BrowserSession | undefined,
   sessionId: string,
 ): Promise<void> {
+  let stage = browser ? "close browser" : "close solari client";
   const work = (async () => {
     if (browser) {
       await browser.close().catch(() => {});
+      stage = "release session";
       await solari.sessions.releaseAndWait(sessionId).catch(() => {});
     }
+    stage = "close solari client";
     await solari.close().catch(() => {});
   })();
 
@@ -142,10 +146,12 @@ async function teardown(
           )),
       ),
     ]);
-  } catch (cause) {
+  } catch {
+    // Expected occasionally: the session reaps server-side, so this is only
+    // telling us where close got stuck, not a lost browser.
     console.error(
-      `[browser-pool] background teardown of ${sessionId} failed:`,
-      cause,
+      `[browser-pool] teardown stuck at "${stage}" after ${TEARDOWN_TIMEOUT_MS}ms ` +
+        `(session ${sessionId.slice(0, 8)}…; auto-releases server-side)`,
     );
   } finally {
     if (timer) clearTimeout(timer);

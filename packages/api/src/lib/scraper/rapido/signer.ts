@@ -211,6 +211,28 @@ function loadWebpackModule(body: string): Record<string, unknown> {
   return moduleExports;
 }
 
+/**
+ * The vendored glue routes Kotlin `println`/Kermit output to `console`, and the
+ * signer debug-prints every request ("Requesting Thiqa with data: …"). Give the
+ * glue its own console so that chatter never reaches our logs — warnings and
+ * errors still pass through untouched.
+ */
+const isChatter = (args: unknown[]): boolean =>
+  typeof args[0] === "string" && args[0].startsWith("Requesting Thiqa");
+
+const chatter =
+  (method: "log" | "info") =>
+  (...args: unknown[]): void => {
+    if (!isChatter(args)) console[method](...args);
+  };
+
+const signerConsole = {
+  log: chatter("log"),
+  info: chatter("info"),
+  warn: console.warn.bind(console),
+  error: console.error.bind(console),
+};
+
 let exportsPromise: Promise<ThiqaExports> | undefined;
 
 async function instantiate(): Promise<ThiqaExports> {
@@ -243,20 +265,22 @@ async function instantiate(): Promise<ThiqaExports> {
     .replace(/\bexport\s+/g, "")
     .replace(/import\.meta/g, () => importMetaStub);
 
-  const instantiateFn = new Function("fetch", `${glue}\nreturn instantiate;`)(
-    (input: unknown) => {
-      const url = String(input instanceof Request ? input.url : input);
-      if (url.endsWith(".wasm")) {
-        return Promise.resolve(
-          new Response(new Uint8Array(wasmBytes), {
-            status: 200,
-            headers: { "Content-Type": "application/wasm" },
-          }),
-        );
-      }
-      throw new Error(`Unexpected fetch during wasm init: ${url}`);
-    },
-  ) as (imports: Record<string, unknown>) => Promise<{
+  const instantiateFn = new Function(
+    "fetch",
+    "console",
+    `${glue}\nreturn instantiate;`,
+  )((input: unknown) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.endsWith(".wasm")) {
+      return Promise.resolve(
+        new Response(new Uint8Array(wasmBytes), {
+          status: 200,
+          headers: { "Content-Type": "application/wasm" },
+        }),
+      );
+    }
+    throw new Error(`Unexpected fetch during wasm init: ${url}`);
+  }, signerConsole) as (imports: Record<string, unknown>) => Promise<{
     exports: ThiqaExports;
   }>;
 

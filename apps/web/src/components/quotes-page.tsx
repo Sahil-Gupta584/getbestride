@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getRouteApi } from '@tanstack/react-router'
+import { getRouteApi, Link } from '@tanstack/react-router'
 import { useMutation } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,6 +12,7 @@ import { Button } from '#/components/ui/button'
 import { Card } from '#/components/ui/card'
 import { Spinner } from '#/components/ui/spinner'
 import { LocationInput } from '#/components/location-input'
+import { Logo } from '#/components/logo'
 
 const routeApi = getRouteApi('/')
 import { distanceMeters } from '#/lib/geocode/locationiq'
@@ -318,7 +319,21 @@ export function QuotesPage() {
   ).filter((cat) => selectedCategory === 'all' || selectedCategory === cat)
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
+    <div className="mx-auto max-w-4xl px-4 py-8">
+      {/* Brand Header */}
+      <header className="mb-8 flex items-center justify-between">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 transition-opacity hover:opacity-90"
+        >
+          <Logo size="lg" />
+        </Link>
+        <Link
+          to="/login"
+          className="rounded-lg border border-gray-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-gray-700 shadow-xs hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 transition-all"
+        ></Link>
+      </header>
+
       <h1 className="text-2xl font-bold tracking-tight text-gray-900">
         Compare ride prices
       </h1>
@@ -422,20 +437,21 @@ export function QuotesPage() {
               </div>
             )}
 
-            <div>
+            <div className="flex justify-end w-full">
               <Button
                 type="submit"
                 variant="primary"
                 disabled={!ready || anyLoading}
+                className="w-full"
               >
                 {anyLoading ? 'Fetching fares…' : 'Compare fares'}
               </Button>
-              {!ready && (
-                <p className="mt-2 text-xs text-gray-500">
-                  Pick a location from the dropdown for both pickup and drop.
-                </p>
-              )}
             </div>
+            {!ready && (
+              <p className="mt-2 text-right text-xs text-gray-500">
+                Pick a location from the dropdown for both pickup and drop.
+              </p>
+            )}
           </form>
         </Card.Content>
       </Card>

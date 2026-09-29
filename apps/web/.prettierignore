@@ -4,3 +4,7 @@ yarn.lock
 
 # Vendored verbatim from Rapido's published bundles. Not ours to format.
 src/lib/scraper/rapido/assets/
+
+# Build output
+.vercel
+.output
