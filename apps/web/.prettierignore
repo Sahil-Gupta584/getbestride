@@ -8,3 +8,4 @@ src/lib/scraper/rapido/assets/
 # Build output
 .vercel
 .output
+
