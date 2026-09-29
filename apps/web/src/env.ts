@@ -15,10 +15,6 @@ export const env = createEnv({
     // part on its own, without the `locationiq:` prefix.
     LOCATIONIQ_TOKEN: z.string().min(1),
 
-    // ── Quotes backend (apps/backend) ───────────────────────────────────────
-    // The browser calls it directly over oRPC (POST {VITE_BACKEND_URL}/rpc),
-    // typed from `@repo/api`. No secret: quotes will become authed procedures.
-    QUOTES_BACKEND_URL: z.string().url().default('http://localhost:4000'),
 
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),

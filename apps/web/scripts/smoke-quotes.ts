@@ -9,7 +9,7 @@ import type { QuotesRouterClient } from '@repo/api/router-types'
 import { env } from '#/env'
 
 const client = createORPCClient<QuotesRouterClient>(
-  new RPCLink({ url: `${env.QUOTES_BACKEND_URL}/rpc` }),
+  new RPCLink({ url: `${env.VITE_BACKEND_URL}/rpc` }),
 )
 
 const ROUTES = [
