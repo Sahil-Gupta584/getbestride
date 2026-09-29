@@ -11,8 +11,26 @@
         ".env*"
       ],
       "outputs": [
-        ".next/**",
-        "!.next/cache/**"
+        "dist/**",
+        ".output/**"
+      ],
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_URL",
+        "BETTER_AUTH_SECRET",
+        "RESEND_API_KEY",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "LOCATIONIQ_TOKEN",
+        "SENTRY_AUTH_TOKEN",
+        "DODO_PAYMENTS_API_KEY",
+        "DODO_PAYMENTS_WEBHOOK_KEY",
+        "DODO_PAYMENTS_ENVIRONMENT",
+        "VITE_BACKEND_URL",
+        "VITE_SENTRY_DSN",
+        "VITE_SENTRY_ORG",
+        "VITE_SENTRY_PROJECT",
+        "VITE_GOOGLE_AUTH_ENABLED"
       ]
     },
     "lint": {
